@@ -1,2 +1,5 @@
 /dist
+/.venv
+/.pypirc
 /src/vsoa.egg-info/
+/src/vsoa/__pycache__

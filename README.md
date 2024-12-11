@@ -1,5 +1,4 @@
 # Overview
-
 VSOA is the abbreviation of Vehicle SOA presented by ACOINFO, VSOA provides a reliable, Real-Time SOA (Service Oriented Architecture) framework, this framework has multi-language and multi-environment implementation, developers can use this framework to build a distributed service model. 
 
 VSOA includes the following features:
@@ -8,10 +7,13 @@ VSOA includes the following features:
 1. Support Real-Time Remote Procedure Call
 1. Support parallel multiple command sequences
 1. Support reliable and unreliable data publishing and datagram
-1. Support multi-channel full-duplex high speed parallel data stream
+1. Support multi-channel full-duplex high speed parallel data streams
 1. Support network QoS control
 1. Easily implement server fault-tolerant design
 1. Supports multiple language bindings
+1. Support work queue mechanism
+1. Support TLS encrypted connection
+1. Support client robot
 
 VSOA is a dual-channel communication protocol, using both **TCP** and **UDP**, among which the API marked with `quick` uses the **UDP** channel. The quick channel is used for high-frequency data update channels. Due to the high data update frequency, the requirements for communication reliability are not strict. It should be noted that **UDP** channel cannot pass through NAT network, so please do not use quick channel in NAT network.
 
@@ -21,6 +23,8 @@ User can use the following code to import the `vsoa` module.
 ``` python
 import vsoa
 ```
+
+> Python minimum version requirement 3.9, recommended >= 3.12.
 
 # VSOA Server Class
 ## vsoa.Server(info: dict | str = '', passwd: str = '', raw: bool = False)
@@ -60,9 +64,30 @@ addr, port = server.address()
 
 Set a new password for the server, `None` or `''` mean no password.
 
+**NOTICE**: The password is just a string without any secure encryption, therefore, it is only a relatively simple security management.
+
+## server.getpeercert(binary: bool = False) -> dict | None
+
+- `binary`  information format,Default  False.
+
+Get the peer certificate information.
+
+When binary is set to True, the method returns the certificate in binary form, which can be used in specific situations where the certificate data needs to be saved intact and passed to other underlying functions that may require input in binary format for further processing.
+
+When binary is set to False, this method returns a data structure of type dict that contains many details about the certificate,commonly as follows:
+
+- `"version"`  Version number of the certificate.
+- `"serialNumber"` Serial number of certificate.
+- `"subject"` Certificate subject information.
+- `"issuer"` Certificate issuer information.
+- `"notBefore"` Start validity period of the certificate.
+- `"notAfter"` Expiration date of the certificate.
+
+There are also some other information such as public key related information, extension information, etc. Different certificates may have more detailed content in these aspects.
+
 ## server.publish(url: str, payload: vsoa.Payload | dict = None, quick: bool = False) -> bool
 + `url` Publish URL.
-+ `payload` Payload
++ `payload` Payload data.
 + `quick` Whether to use quick mode.
 + Returns: Whether publish is successful.
 
@@ -83,6 +108,8 @@ server.publish('/a/b/c', { 'param': { 'hello': 'hello' }, 'data': bytes([1, 2, 3
 server.publish('/a/b/c', vsoa.Payload({ 'hello': 'hello' }))
 server.publish('/a/b/c', vsoa.Payload({ 'hello': 'hello' }, bytes([1, 2, 3])))
 ```
+
+**NOTICE：**The URL must start with '/', otherwise an exception will be generated.
 
 ## server.is_subscribed(url: str) -> bool
 + `url` Publish URL.
@@ -106,17 +133,108 @@ def echo(cli, request, payload):
 server.run('0.0.0.0', 3005)
 ```
 
-## server.sendtimeout(timeout: float)
+## server.sendtimeout(timeout: float, sync_to_clis: bool = True)
 + `timeout` Send timeout.
++ `sync_to_clis` Whether set send timeout to the connected clients.
 
-Set send timeout, default is `0.1`. (100ms)
+Set send timeout, default is `0.1`. (100ms), if` sync_to_clis` is set to True, it will also set the send timeout for already connected clients.
 
-## server.run(addr: str, port: int, sslopt: dict = None)
-+ `addr` Local address.
+## server.run(host: str, port: int, sslopt: dict = None)
++ `host` Local address.
 + `port` Local port.
-+ `sslopt` TLS connection options, Currently not supported.
++ `sslopt` TLS connection options, Optional. Default is `None`.
 
 Start the server and execute the event loop. This function does not return when no errors occur.
+
+### one-way authentication sslopt
+
+#### server sslopt
+
+``` python
+def sni_callback(sock, server_hostname, sslcontext):
+	return server_hostname
+
+sslopt = {
+	'cert': 'server.crt',
+	'key': 'server.key',
+	'load_default_certs': False,
+	'sni_callback': sni_callback,
+	'verify_mode': ssl.CERT_REQUIRED,
+	'handsake_error_log': True,
+	'passwd': None
+}
+```
+
++ `cert` Server certificate file path.
++ `key` Server  private key file path.
++ `load_default_certs` Whether to load the default system certificate. When set to `True`, Python's SSL module attempts to load some of the trusted certificates configured by the system default. if you are connecting to a server that issues certificates using a self-signed certificate or a private CA, you may need to configure additional certificate-related options (such as via ca_cert, etc.) to ensure that the authentication passes.
++ `sni_callback` SNI is an extension mechanism in the SSL/TLS protocol that allows the client to indicate to the server at the beginning of the SSL handshake the name of the target server to connect to (usually the domain name).
++ `verify_mode` During the establishment of an SSL connection, the client usually needs to verify the validity of the server certificate to ensure that the server it is communicating with is trusted. Python's ssl module provides several different authentication mode options:
+  + `ssl.CERT_NONE` Indicates that certificate verification is not performed. If you want to connect to a server that issues certificates using a self-signed certificate or a private CA, `verify_mode` must be `ssl.CERT_NONE`.
+  + `ssl.CERT_REQUIRED` Mandatory server certificate verification.
+  + `ssl.CERT_OPTIONAL` Certificate verification is optional and is optional by default.
++ `handsake_error_log` Used to control whether and how to record the error information during the handshake. The default value is `False`.
++ `passwd`  Certificate password. Optional.
+
+#### client sslopt
+
+``` python
+sslopt = {
+	'hostname': '127.0.0.1',
+	'load_default_certs': False,
+	'ca_cert': 'ca.crt',
+	'verify_mode': ssl.CERT_REQUIRED,
+	'handsake_error_log': True,
+}
+```
+
++ `hostname` The host name or IP address of the server to connect.
++ `load_default_certs` Whether to load the default system certificate. When set to `True`, Python's SSL module attempts to load some of the trusted certificates configured by the system default. if you are connecting to a server that issues certificates using a self-signed certificate or a private CA, you may need to configure additional certificate-related options (such as via ca_cert, etc.) to ensure that the authentication passes.
++ `ca_cert` Specifies the certificate file of the certificate Authority (CA) that is used to verify that the server certificate is valid.
++ `verify_mode` Same as server sslopt usage.
++ `handsake_error_log` Same as server sslopt usage.
+
+### bidirectional authentication sslopt
+
+#### server sslopt
+
+``` python
+sslopt = {
+	'cert': 'server.crt',
+	'key': 'server.key',
+	'ca_cert': 'ca.crt',
+	'load_default_certs': False,
+	'sni_callback': sni_callback,
+	'verify_mode': ssl.CERT_REQUIRED,
+	'handsake_error_log': True,
+	'passwd': None
+}
+```
+
+`bidirectional authentication` has one more `ca_cert` than `one-way authentication`.
+
++ `ca_cert` When the sslopt dictionary contains the 'ca_cert' key, it means that two-way authentication is required, that is, the server must not only prove its identity to the client, but also verify the identity of the client.
+
+#### client sslopt
+
+``` python
+sslopt = {
+	'hostname': '127.0.0.1',
+	'load_default_certs': True,
+	'ca_cert': 'ca.crt',
+	'cert': 'client.crt',
+	'key': 'client.key',
+	'verify_mode': ssl.CERT_REQUIRED,
+	'handsake_error_log': True,
+	'passwd': None
+}
+```
+
+`bidirectional authentication` has more `cert` and `key` than `one-way authentication`.
+
++ `cert`  Client certificate file path.
++ `key` Client private key file path.
++ `passwd` Certificate password. Optional.
 
 ## server.onclient
 + On client connect / disconnect callback.
@@ -142,10 +260,10 @@ def ondata(cli, url: str, payload: vsoa.Payload, quick: bool):
 server.ondata = ondata
 ```
 
-## server.create_stream(onlink: callable, ondata: callable, timeout: float = 5.0) -> ServerStream
+## server.create_stream(onlink: callable, ondata: callable = None, timeout: float = 5.0) -> vsoa.Server.Stream
 + `onlink` Client stream connect / disconnect callback.
-+ `ondata` Receive client stream data callback
-+ `timeout` Wait for client connection timeout.
++ `ondata` Receive client stream data callback.
++ `timeout` Wait for client connection timeout, unit seconds, default is 5s.
 
 Create a stream to communicate with the client via stream. During normal communication, `onlink` will be called twice, once when the connection is successful and once when the connection is disconnected. When the stream wait times out, `onlink` will only be called once, and the `conn` parameter is `False`.
 
@@ -245,9 +363,9 @@ server.onclient = onclient
 Whether the specified URL is subscribed by this client.
 
 ## cli.reply(seqno: int, payload: vsoa.Payload | dict = None, status: int = 0, tunid: int = 0) -> bool
-+ `seqno` Request seqno.
-+ `payload` Payload to be replied.
-+ `status` Replied `header.status`.
++ `seqno` Request seqno, should be same as the RPC request.
++ `payload` Payload to be replied, may be NULL.
++ `status` RPC reply status code, 0 means success
 + `tunid` If stream communication exists, the returned `stream.tunid`.
 
 Client RPC call response. `status` values include:
@@ -278,7 +396,7 @@ p = { 'param': { 'a': 1 }, 'data': bytes([1, 2, 3]) }
 cli.reply(request.seqno, p)
 ```
 
-## cli.datagram(url: str, payload: vsoa.Payload | dict = None, quick: bool = False)
+## cli.datagram(url: str, payload: vsoa.Payload | dict = None, quick: bool = False) -> bool
 + `url` Specified URL.
 + `payload` Payload to be send.
 + `quick` Whether to use quick channel.
@@ -291,14 +409,33 @@ cli.datagram('/custom/data', p)
 ```
 
 ## cli.keepalive(idle: int)
-+ `idle` Idle interval time, unit: seconds
++ `idle` Idle interval time, unit: seconds.
 
 Enable the client TCP keepalive function. If no reply is received for more than three times the `idle` time, it means the client is breakdown.
 
 ## cli.sendtimeout(timeout: float)
 + `timeout` Packet send timeout.
 
-When sending packet to the client, the sending is considered failed if the `timeout` period is exceeded. Default: 0.5s.
+When sending packet to the client, the sending is considered failed if the `timeout` period is exceeded. Default: 0.1s.
+
+## cli.getpeercert(binary: bool = False) -> dict | None
+
+- `binary` information format,Default False.
+
+Get peer certificate information (When using a TLS connection).
+
+When binary is set to True, the method returns the certificate in binary form, which can be used in specific situations where the certificate data needs to be saved intact and passed to other underlying functions that may require input in binary format for further processing.
+
+When binary is set to False, this method returns a data structure of type dict that contains many details about the certificate,commonly as follows:
+
+- `"version"` Version number of the certificate.
+- `"serialNumber"` Serial number of certificate.
+- `"subject"` Certificate subject information.
+- `"issuer"` Certificate issuer information.
+- `"notBefore"` Start the validity period of the certificate.
+- `"notAfter"` Expiration date of the certificate.
+
+There is also some other information, such as public key related information, extension information, etc. Different certificates may have more detailed content in these aspects.
 
 ## cli.onsubscribe
 
@@ -325,36 +462,36 @@ cli.onunsubscribe = onunsubscribe
 # Server Stream Object
 ## stream.tunid
 
-Get stream tunnel ID.
+Get stream tunnel ID.(`int` type)
 
 ## stream.connected
 
-Check if stream is connected.
+Check if stream is connected.(`bool` type)
 
 ## stream.close()
 
-Close this stream.
+Close this stream. will be called automatically when disconnecting.
 
 ## stream.send(data: bytearray | bytes) -> int
 + `data` Data to be sent.
-+ Returns: The actual data length sent
++ Returns: The actual data length sent.
 
 Send data using stream.
 
 ## stream.keepalive(idle: int)
-+ `idle` Idle interval time, unit: seconds
++ `idle` Idle interval time, unit: seconds.
 
 Enable the stream TCP keepalive function. If no reply is received for more than three times the `idle` time, it means the stream is breakdown.
 
 ## stream.sendtimeout(timeout: float)
-+ `timeout` Packet send timeout.
++ `timeout` Packet send timeout, unit: senconds.
 
 When sending packet to the stream, the sending is considered failed if the `timeout` period is exceeded. Default: block until ready to send.
 
 # VSOA Client Class
 ## vsoa.Client(raw: bool = False)
 + `raw` Whether publish, RPC and DATAGRAM `payload.param` automatically perform JSON parsing.
-+ Returns: VSOA server object.
++ Returns: VSOA client object.
 
 ``` python
 client = vsoa.Client()
@@ -363,7 +500,7 @@ client = vsoa.Client()
 # VSOA Client Object
 ## client.connected
 
-Whether the current client is connected to the server.
+Whether the current client is connected to the server.(`bool` type)
 
 ## client.onconnect
 
@@ -377,6 +514,20 @@ def onconnect(client, conn: bool, info: str | dict | list)
 		print('disconnected')
 
 client.onconnect = onconnect
+```
+
+## client.onmessage
+
+- On server PUBLISH data received callback.
+
+The client will call this function when server PUBLISH data is received.
+
+```
+def onmessage(client, url: str, payload: vsoa.Payload, quick: bool):
+	print('Msg received, url:', url, 'payload:', dict(payload), 'Q:', quick)
+
+client.onmessage = onmessage
+client.subscribe('/topic1')
 ```
 
 ## client.ondata
@@ -398,9 +549,9 @@ Close this client. This client object is no longer allowed to be used.
 ## client.call(url: str, method: str | int = 0, payload: vsoa.Payload | dict = None, callback: callable = None, timeout: float = 60.0) -> bool
 + `url` Command URL.
 + `method` Request method `vsoa.METHOD_GET` (0) or `vsoa.METHOD_SET` (1)
-+ `payload` Request payload.
++ `payload` RPC payload. This payload will be sent to the VSOA server..
 + `callback` Server response callback.
-+ `timeout` Wait timeout out.
++ `timeout` Wait timeout out, unit: seconds, default is 60s.
 + Returns: Whether request send successfully.
 
 ``` python
@@ -422,7 +573,7 @@ This function will return immediately, and the `callback` will be executed in th
 
 ## client.ping(callback: callable = None, timeout: float = 60.0) -> bool
 + `callback` Server ping echo callback.
-+ `timeout` Wait timeout out.
++ `timeout` Wait timeout out, unit: seconds, default is 60s.
 + Returns: Whether request send successfully.
 
 Send a ping request.
@@ -434,10 +585,10 @@ def onecho(cli, success: bool):
 client.ping(onecho, 10)
 ```
 
-## client.subscribe(url: str | list[str], callback: callable = None, timeout: float = 60.0) -> bool:
+## client.subscribe(url: str | list[str], callback: callable = None, timeout: float = 60.0) -> bool
 + `url` URL or URL list that needs to be subscribed.
-+ `callback` Subscription callback.
-+ `timeout` Wait timeout out.
++ `callback` This will be called after the subscribe request is successfully accepted by the server and the data is published.
++ `timeout` Wait timeout out, unit: seconds, default is 60s.
 + Returns: Whether request send successfully.
 
 Subscribe to the specified URLs message. When the server publishes matching message, the client can receive this data use `onmessage`.
@@ -452,10 +603,10 @@ client.subscribe('/topic1')
 client.subscribe(['/topic2', '/topic3'])
 ```
 
-## client.unsubscribe(url: str | list[str], callback: callable = None, timeout: float = 60.0) -> bool:
+## client.unsubscribe(url: str | list[str], callback: callable = None, timeout: float = 60.0) -> bool
 + `url` URL or URL list that needs to be unsubscribed.
-+ `callback` Subscription callback.
-+ `timeout` Wait timeout out.
++ `callback` This will be called after the unsubscribe request is successful.
++ `timeout` Wait timeout out, unit: seconds, default is 60s.
 + Returns: Whether request send successfully.
 
 Unsubscribe to the specified URLs message.
@@ -468,12 +619,18 @@ Unsubscribe to the specified URLs message.
 
 Send a DATAGRAM data to server.
 
+## client.getpeercert(binary: bool = False) -> dict | None
+
+- `binary`  information format, Default False.
+
+Get peer certificate information (When using a TLS connection).
+
 # VSOA Client Object Current Thread Loop Mode
 ## client.connect(url: str, passwd: str = '', timeout: float = 10.0, sslopt: dict = None) -> int
 + `url` Server URL.
 + `passwd` Server password. Optional.
-+ `timeout` Connect timeout.
-+ `sslopt` TLS connection options, Currently not supported.
++ `timeout` Timeout for connecting to the server, unit: seconds, default is 10s. 
++ `sslopt` TLS connection options, Optional. Default is `None`.
 + Returns: Error code.
 
 Connect to the specified server and return the following code:
@@ -487,9 +644,9 @@ Constant|Value|
 `Client.SERVER_NO_RESPONDING`|4
 `Client.INVALID_RESPONDING`|5
 `Client.INVALID_PASSWD`|6
+`Client.SSL_HS_FAILED`|7
 
 ``` python
-ret = client.connect('vsoa://vserv')
 ret = client.connect('vsoa://192.168.0.1:3005')
 if ret:
 	print('Connect error:', ret)
@@ -507,6 +664,25 @@ time.sleep(3)
 client.connect('vsoa://your_server_name_or_ip:port') # reconnect
 ```
 
+## client.sendtimeout(timeout: float)
+
++ `timeout` Send timeout, unit: seconds.
+
+Set send timeout, default is 0.5. (500ms)
+
+## client.linger(time: int = 0) -> bool
+
++ `time` Socket waiting time.
++ Returns: Whether socket linger time is set.
+
+Set socket linger time, default is `0`.
+
+linger is a method related to sockets. It is used to control the behavior of a socket when it is closed, especially when processing unsent data. When the close() method of a socket is called, the linger option can decide whether to wait for unsent data to finish sending, or simply discard it and close the socket.
+
+## client.pendings
+
+Get the number of pending messages. These message types include: RPC, subscribe, unsubscribe, ping. (`int` type)
+
 ## client.run()
 
 Run the client event loop. When this function exits normally, it means that the client has disconnected from the server or the client has been closed.
@@ -522,14 +698,22 @@ while True:
 		time.sleep(1)
 ```
 
+## client.create_stream(tunid: int, onlink: callable, ondata: callable = None, timeout: float = 10.0) -> vsoa.Client.Stream:
++ `tunid` Server peer stream tunnel id.
++ `onlink` Client stream connect / disconnect callback.
++ `ondata` Receive client stream data callback.
++ `timeout` Wait for client connection timeout, unit: seconds, default is 10s.
+
+Used in pair with `server.create_stream`
+
 # VSOA Client Object Robot Loop Mode
 ## client.robot(server: str, passwd: str = '', keepalive: float = 3.0, conn_timeout: float = 10.0, reconn_delay: float = 1.0, sslopt: dict = None)
 + `server` Server URL.
 + `passwd` Server password.
-+ `keepalive` How long does it take to ping the server after a successful connection?
-+ `conn_timeout` Connection timeout.
++ `keepalive` How often send vsoa ping to detect whether the connection is good after the connection is successful. In milliseconds, the minimum is **50ms**. ping timeout is the same as this value.
++ `conn_timeout` Connection timeout, the minimum is **50ms.**
 + `reconn_delay` Waiting time for reconnection after disconnection.
-+ `sslopt` TLS connection options, Currently not supported.
++ `sslopt` TLS connection options, Optional. Default is `None`.
 
 This function will automatically start a robot thread to handle the client event loop, and will automatically handle broken links.
 
@@ -547,6 +731,16 @@ while True:
 		print('fetch error:', errcode) # `errcode` is same as client connect error code
 ```
 
+## client.robot_ping_turbo(turbo: float, max_cnt: int = 50) -> bool
+
+- `turbo` Robot ping interval.
+- `max_cnt` Maximum attempts (not in use).
+- Returns: Whether turbo ping is set.
+
+When there is an RPC call pending and data packet loss occurs, and at this time, both the client and the server need to try their best to perform TCP fast retransmission. You can set this turbo parameter, whose minimum value is 25ms. 0 means disable turbo ping.
+
+When turbo ping is enabled, the turbo value must be less than or equal to keepalive in client.robot.
+
 ## client.fetch(url: str, method: str | int = 0, payload: vsoa.Payload | dict = None, timeout: float = 60.0) -> tuple[vsoa.Header, vsoa.Payload, int]
 + `url` Command URL.
 + `method` Request method `vsoa.METHOD_GET` (0) or `vsoa.METHOD_SET` (1)
@@ -556,17 +750,47 @@ while True:
 
 This function is a synchronous version of client.call, this function is not allowed to be executed in the client event loop thread.
 
+# Client Stream Object
+
+## stream.connected
+
+Check if stream is connected. (`bool` type)
+
+## stream.close()
+
+Close this stream.
+
+## stream.send(data: bytearray | bytes) -> int
+
++ `data` Data to be sent.
+
++ Returns: The actual data length sent.
+
+Send data using stream.
+
+## stream.keepalive(idle: int)
+
++ `idle` Idle interval time, unit: seconds.
+
+Enable the stream TCP keepalive function. If no reply is received for more than three times the `idle` time, it means the stream is breakdown.
+
+## stream.sendtimeout(timeout: float)
+
++ `timeout` Packet send timeout, unit: seconds.
+
+When sending packet to the stream, the sending is considered failed if the `timeout` period is exceeded. Default: block until ready to send.
+
 # VSOA Client 'Once'
 If we only need one RPC request and don't want to maintain a long-term connection with the server, we can use the following operation.
 
 ## vsoa.fetch(url: str, passwd: str = None, method: str | int = 0, payload: vsoa.Payload | dict = None, timeout: float = 10.0, raw: bool = False, sslopt: dict = None) -> tuple[vsoa.Header, vsoa.Payload, int]
 + `url` Request URL.
 + `passwd` Server password.
-+ `method` Request method `vsoa.METHOD_GET` (0) or `vsoa.METHOD_SET` (1)
++ `method` Request method `vsoa.METHOD_GET` (0) or `vsoa.METHOD_SET` (1).
 + `payload` Request payload.
-+ `timeout` Wait timeout out.
++ `timeout` Wait timeout out, unit: seconds, default is 10s.
 + `raw` Whether to automatically parse JSON `payload.param`.
-+ `sslopt` TLS connection options, Currently not supported.
++ `sslopt` TLS connection options, Optional. Default is `None`.
 + Returns: Whether request result and error code.
 
 ``` python
@@ -601,7 +825,7 @@ pserv.run('0.0.0.0', 3000) # Position server run, never return
 
 This function can specify the position server address used by `vsoa.lookup`.
 
-## vsoa.lookup(name: str, domain: int = -1) -> tuple[str, int]:
+## vsoa.lookup(name: str, domain: int = -1) -> tuple[str, int]
 + `name` Server name.
 + `domain` Specify IP protocol family, `-1` means any.
 + Returns: Queryed server address.
@@ -622,12 +846,12 @@ Query order:
 # VSOA Timer
 VSOA provides a general timer function, and the timer callback will be executed in the timer service thread.
 
-## vsoa.Timer() -> Timer
+## vsoa.Timer() 
 
 Create a timer object.
 
 ## timer.start(timeout: float, callback: callable, interval: float = 0, args = (), kwargs = {})
-+ `timeout` Timer timeout seconds.
++ `timeout` Timer timeout seconds must be greater than 0.
 + `callback` Timer timeout callback.
 + `interval` Periodic interval seconds, `0` means one shot timing.
 + `args` Callback arguments.
@@ -654,15 +878,16 @@ Check whether the timer is timing.
 # VSOA EventEmitter
 vsoa provides an `EventEmitter` class similar to JSRE and NodeJS to facilitate event subscription.
 
-`EventEmitter` has two special events `'new_listener'` and `'remove_listener'` indicating the installation and removal of listener. These events is generated automatically. Developers are not allowed to emit these events.
+`EventEmitter` has two special events `new_listener` and `remove_listener` indicating the installation and removal of listener. These events is generated automatically. Developers are not allowed to emit these events.
 
-`'new_listener'` and `'remove_listener'` event callback parameters are as follows:
+`new_listener`and `remove_listener` event callback parameters are as follows:
+
 + `event` Event.
 + `listener` Event listener.
 
 ## vsoa.EventEmitter()
 
-Event emitter class, Users class can inherit this class.
+Event emitter class, Users class can inherit this class, Create a event object.
 
 ``` python
 class MyClass(vsoa.EventEmitter):
@@ -671,8 +896,8 @@ class MyClass(vsoa.EventEmitter):
 		...
 ```
 
-## event.add_listerner(event: int | str | object, listener: callable) -> None
-+ `event` Event
+## event.add_listerner(event, listener: callable) 
++ `event` Event.
 + `listener` When this event occurs, this callback function is executed.
 
 Add a listener for the specified event. The listener function arguments need to be consistent with the parameters generated by the event.
@@ -690,37 +915,37 @@ event.add_listerner('test', func)
 event.emit('test')
 ```
 
-## event.on(event: int | str | object, listener: callable) -> None
+## event.on(event, listener: callable) 
 
-Alias ​​of `event.add_listerner`
+Alias ​​of `event.add_listerner`.
 
 ## event.once(event: int | str | object, listener: callable) -> None
 
 Similar to `event.add_listerner`, but the added event listener function will only be executed once.
 
 ## event.remove_listener(event, listener: callable = None) -> bool
-+ `event` Event
-+ `listener` Need matching listener function
++ `event` Event.
++ `listener` Need matching listener function.
 
 Delete the previously added event listener. If `listener` is `None`, it means deleting all listeners for the specified event.
 
-## event.remove_all_listeners(event = None) -> None
-+ `event` Event
+## event.remove_all_listeners(event = None) 
++ `event` Event.
 
 Delete all listeners for the specified event, `event` is `None` means deleting all listeners functions for all events.
 
 ## event.listener_count(event) -> int
-+ `event` Event
++ `event` Event.
 
 Get the number of listeners for the specified event.
 
 ## event.listeners(event) -> list[callable]
-+ `event` Event
++ `event` Event.
 
-Get the listener list of the specified event
+Get the listener list of the specified event.
 
 ## event.emit(event, args = (), kwargs = {}) -> bool
-+ `event` Event
++ `event` Event.
 + `args` Event arguments.
 + `kwargs` Event keyword arguments.
 
@@ -742,11 +967,11 @@ e.emit('test', args = (1, 2))
 # VSOA WorkQueue
 VSOA provides an asynchronous work queue function. Users can add job functions to the asynchronous work queue for sequential execution.
 
-## vsoa.WorkQueue() -> WorkQueue
+## vsoa.WorkQueue() 
 
 Create a work queue.
 
-## wq.add(func: callable, args = (), kwargs = {}) -> None
+## wq.add(func: callable, args = (), kwargs = {})
 + `func` Work queue job function.
 + `args` Function arguments.
 + `kwargs` Function keywords arguments.
@@ -756,9 +981,9 @@ def hello(count: int):
 	print('Hello count:', count)
 
 wq = vsoa.WorkQueue()
-wq.add(hello, args = (1))
-wq.add(hello, args = (2))
-wq.add(hello, args = (3))
+wq.add(hello, args = (1,))
+wq.add(hello, args = (2,))
+wq.add(hello, args = (3,))
 ```
 
 The server can use `WorkQueue` to implement asynchronous command processing to avoid the main loop being blocked for too long.
@@ -782,16 +1007,16 @@ app.run('0.0.0.0', 3005)
 
 Add job if job function not in queued.
 
-## wq.delete(func: callable) -> bool:
+## wq.delete(func: callable) -> bool
 + `func` Work queue job function.
 + Returns: Whether the deletion is successful.
 
 Delete the specified job that is not being executed in the queue.
 
-## wq.is_queued(func: callable) -> bool:
+## wq.is_queued(func: callable) -> bool
 + `func` Work queue job function.
 + Returns: Whether queued.
 
-Whether the specified jon is in the queue.
+Whether the specified job is in the queue.
 
 ---
