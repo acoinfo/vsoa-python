@@ -1,2 +1,4 @@
 /dist
+/.venv
 /src/vsoa.egg-info/
+/src/vsoa/__pycache__
