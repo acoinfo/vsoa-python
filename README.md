@@ -24,7 +24,7 @@ User can use the following code to import the `vsoa` module.
 import vsoa
 ```
 
-> Python minimum version requirement 3.9, recommended >= 3.12.
+> Python minimum version requirement 3.10, recommended >= 3.12.
 
 # VSOA Server Class
 ## vsoa.Server(info: dict | str = '', passwd: str = '', raw: bool = False)

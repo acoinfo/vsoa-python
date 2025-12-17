@@ -11,7 +11,6 @@
 
 import socket, ssl, struct, select
 from platform import system
-from typing import Union
 
 # Fixed socket.MSG_DONTWAIT in other OS
 if not hasattr(socket, 'MSG_DONTWAIT'):
@@ -43,7 +42,7 @@ def create(family: int, proto: str, nonblock: bool = True, server: bool = False)
 	return s
 
 # Socket set linger time
-def linger(s: Union[socket.socket, ssl.SSLSocket], time: int = 0) -> None:
+def linger(s: socket.socket | ssl.SSLSocket, time: int = 0) -> None:
 	param = struct.pack('ii', 1, time)
 	try:
 		s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, param)
@@ -51,27 +50,27 @@ def linger(s: Union[socket.socket, ssl.SSLSocket], time: int = 0) -> None:
 		pass
 
 # Socket set priority
-def priority(s: Union[socket.socket, ssl.SSLSocket], prio: int) -> None:
+def priority(s: socket.socket | ssl.SSLSocket, prio: int) -> None:
 	dscp = prio << 5
 	if dscp:
 		dscp |= 0x08
 	s.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, dscp)
 
 # Socket set keepalive
-def keepalive(s: Union[socket.socket, ssl.SSLSocket], idle: int, mcnt: int = 3) -> None:
+def keepalive(s: socket.socket | ssl.SSLSocket, idle: int, mcnt: int = 3) -> None:
 	s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE,  idle)
 	s.setsockopt(socket.SOL_TCP,    socket.TCP_KEEPINTVL, idle)
 	s.setsockopt(socket.SOL_TCP,    socket.TCP_KEEPCNT,   mcnt)
 
 # TCP socket shutdown
-def tcpshutdown(s: Union[socket.socket, ssl.SSLSocket], how: int = socket.SHUT_RDWR) -> None:
+def tcpshutdown(s: socket.socket | ssl.SSLSocket, how: int = socket.SHUT_RDWR) -> None:
 	try:
 		s.shutdown(how)
 	except:
 		pass
 
 # TCP socket send
-def tcpsend(s: Union[socket.socket, ssl.SSLSocket], packet: Union[bytes, bytearray], total: int = 0, timeout: float = -1) -> int:
+def tcpsend(s: socket.socket | ssl.SSLSocket, packet: bytes | bytearray, total: int = 0, timeout: float = -1) -> int:
 	flags = 0 if isinstance(s, ssl.SSLSocket) else socket.MSG_NOSIGNAL
 	alrdy = 0
 
@@ -108,7 +107,7 @@ def event_read(sread: socket.socket) -> bytes:
 	return sread.recv(4, socket.MSG_DONTWAIT)
 
 # Event emit
-def event_emit(swrite: socket.socket, data: Union[bytes, bytearray] = None) -> None:
+def event_emit(swrite: socket.socket, data: bytes | bytearray = None) -> None:
 	if not data:
 		data = DEF_EVENT_DATA
 	swrite.send(data, socket.MSG_NOSIGNAL)
