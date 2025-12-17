@@ -8,7 +8,6 @@
 #
 # Author: Han.hui <hanhui@acoinfo.com>
 #
-from typing import Union
 
 # Header
 class Header:
@@ -45,7 +44,7 @@ class Request:
 
 # Payload
 class Payload:
-	def __init__(self, param: Union[object, dict, list, str, bytes,bytearray] = None, data: Union[bytes, bytearray] = None) -> None:
+	def __init__(self, param: object | dict | list | str | bytes | bytearray = None, data: bytes | bytearray = None) -> None:
 		self.param = param
 		self.data  = data
 

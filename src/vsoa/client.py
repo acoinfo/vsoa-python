@@ -14,7 +14,6 @@ import vsoa.sockopt as sockopt
 import vsoa.position as position
 import vsoa.interface as interface
 import os, time, struct, threading, socket, ssl, select, errno, ipaddress, urllib.parse
-from typing import Union
 from datetime import datetime
 from vsoa.sslwork import create_ssl_context_client, request_ssl_handshake, unrequest_ssl_handshake, do_ssl_handshake_sync, do_ssl_recv
 
@@ -99,7 +98,7 @@ class Stream:
 		self._alive = int(timeout * 1000)
 
 		# Create socket
-		self._sock: Union[socket.socket, ssl.SSLSocket] = sockopt.create(family, 'tcp', server = False)
+		self._sock: socket.socket | ssl.SSLSocket = sockopt.create(family, 'tcp', server = False)
 		self._conn = True
 		self.__cli = client
 
@@ -195,7 +194,7 @@ class Stream:
 				sockopt.tcpshutdown(self._sock)
 
 	# Send data
-	def send(self, data: Union[bytearray, bytes]) -> int:
+	def send(self, data: bytearray | bytes) -> int:
 		if self._sock == None:
 			raise Exception('Stream closed')
 
@@ -291,7 +290,7 @@ class Client:
 		self.__seqno_nq = 0
 
 		# Sockets
-		self.__sock : Union[socket.socket, ssl.SSLSocket] = None
+		self.__sock : socket.socket | ssl.SSLSocket = None
 		self.__quick: socket.socket                 = None
 
 		# Event and socket status
@@ -416,7 +415,7 @@ class Client:
 		return server
 
 	# On connect
-	def __onconnect(self, header: interface.Header, param: dict, data: Union[bytes, bytearray], host: str) -> int:
+	def __onconnect(self, header: interface.Header, param: dict, data: bytes | bytearray, host: str) -> int:
 		if not (header.flags & parser.VSOA_FLAG_REPLY):
 			return Client.INVALID_RESPONDING
 		if header.type != parser.VSOA_TYPE_SERVINFO or header.status:
@@ -592,7 +591,7 @@ class Client:
 		return Pending(alive, seqno, callback, ftype, is_fetch)
 
 	# Request
-	def __request(self, type: int, flags: int, url: str, payload: Union[interface.Payload, dict], callback: callable, timeout: float, is_fetch: bool = False) -> bool:
+	def __request(self, type: int, flags: int, url: str, payload: interface.Payload | dict, callback: callable, timeout: float, is_fetch: bool = False) -> bool:
 		if not self.__connected:
 			return False
 
@@ -625,7 +624,7 @@ class Client:
 		return True
 
 	# RPC call
-	def call(self, url: str, method: Union[str, int] = 0, payload: Union[interface.Payload, dict] = None, callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
+	def call(self, url: str, method: str | int = 0, payload: interface.Payload | dict = None, callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
 		if not url or type(url) != str:
 			raise TypeError('URL invalid')
 		if not url.startswith('/'):
@@ -641,7 +640,7 @@ class Client:
 		return self.__request(parser.VSOA_TYPE_RPC, flags, url, payload, callback, timeout)
 
 	# RPC fetch (RPC synchronous calls)
-	def fetch(self, url: str, method: Union[str, int] = 0, payload: Union[interface.Payload, dict] = None, timeout: float = CLIENT_DEF_TIMEOUT) -> tuple[interface.Header, interface.Payload, int]:
+	def fetch(self, url: str, method: str | int = 0, payload: interface.Payload | dict = None, timeout: float = CLIENT_DEF_TIMEOUT) -> tuple[interface.Header, interface.Payload, int]:
 		if not url or type(url) != str:
 			raise TypeError('URL invalid')
 		if not url.startswith('/'):
@@ -691,7 +690,7 @@ class Client:
 					0, None, None, callback, timeout)
 
 	# Subscribe URLs
-	def subscribe(self, url: Union[str, list[str]], callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
+	def subscribe(self, url: str | list[str], callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
 		if not self.__connected:
 			return False
 
@@ -706,7 +705,7 @@ class Client:
 		return self.__request(parser.VSOA_TYPE_SUBSCRIBE, 0, url, payload, callback, timeout)
 
 	# Unsubscribe URLs
-	def unsubscribe(self, url: Union[str, list[str]], callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
+	def unsubscribe(self, url: str | list[str], callback: callable = None, timeout: float = CLIENT_DEF_TIMEOUT) -> bool:
 		if not self.__connected:
 			return False
 
@@ -721,7 +720,7 @@ class Client:
 		return self.__request(parser.VSOA_TYPE_UNSUBSCRIBE, 0, url, payload, callback, timeout)
 
 	# Send datagram
-	def datagram(self, url: str, payload: Union[interface.Payload, dict] = None, quick: bool = False) -> bool:
+	def datagram(self, url: str, payload: interface.Payload | dict = None, quick: bool = False) -> bool:
 		if not url or type(url) != str:
 			raise TypeError('URL invalid')
 		if not url.startswith('/'):
@@ -759,7 +758,7 @@ class Client:
 		return Stream(self, self.__family, (self.__server, tunid), onlink, ondata, timeout, self.__ssl_opt)
 
 	# Packet input
-	def __pinput(self, header: interface.Header, url: str, param: Union[dict, list, bytes], data: bytes, quick: bool = False) -> None:
+	def __pinput(self, header: interface.Header, url: str, param: dict | list | bytes, data: bytes, quick: bool = False) -> None:
 		ptype   = header.type
 		payload = interface.Payload(param, data)
 
@@ -1004,15 +1003,15 @@ class Client:
 				sockopt.event_emit(self.__event[1])
 
 	# Get peer certificate
-	def getpeercert(self, binary: bool = False) -> Union[dict, None]:
+	def getpeercert(self, binary: bool = False) -> dict | None:
 		if self.__connected and self.__ssl_ctx and self.__sock:
 			return self.__sock.getpeercert(binary_form = binary)
 		else:
 			return None
 
 # Client fetch
-def fetch(url: str, passwd: str = None, method: Union[str, int] = 0, \
-			payload: Union[interface.Payload, dict] = None, timeout: float = CLIENT_DEF_CONN_TIMEOUT, raw: bool = False, sslopt: dict = None) -> tuple[interface.Header, interface.Payload, int]:
+def fetch(url: str, passwd: str = None, method: str | int = 0, \
+			payload: interface.Payload | dict = None, timeout: float = CLIENT_DEF_CONN_TIMEOUT, raw: bool = False, sslopt: dict = None) -> tuple[interface.Header, interface.Payload, int]:
 	r_h = r_p = None
 
 	# RPC callback

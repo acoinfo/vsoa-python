@@ -14,7 +14,6 @@ import vsoa.sockopt as sockopt
 import vsoa.interface as interface
 import vsoa.workqueue as workqueue
 import time, struct, threading, socket, ssl, select
-from typing import Union
 from vsoa.sslwork import create_ssl_context_server, request_ssl_handshake, unrequest_ssl_handshake
 
 # VSOA server backlog
@@ -42,7 +41,7 @@ class Stream:
 		# Stream socket
 		self.__server  = server
 		self.__listen  = sockopt.create(family, 'tcp', server = True)
-		self.__clisock : Union[socket.socket, ssl.SSLSocket] = None
+		self.__clisock : socket.socket | ssl.SSLSocket = None
 
 		# Send timeout, initialize to blocking send
 		self.__sendto = -1
@@ -76,7 +75,7 @@ class Stream:
 		return True if self.__clisock else False
 
 	# Get socket need to monitor
-	def _sock(self) -> Union[socket.socket, ssl.SSLSocket]:
+	def _sock(self) -> socket.socket | ssl.SSLSocket:
 		return self.__listen if self.__listen else self.__clisock
 
 	# SSL handshake wakeup
@@ -121,7 +120,7 @@ class Stream:
 
 	# Stream event
 	def _event(self, sock: socket.socket) -> None:
-		cli_sock: Union[socket.socket, ssl.SSLSocket] = None
+		cli_sock: socket.socket | ssl.SSLSocket = None
 
 		with self.__server._lock:
 			if sock == self.__listen:
@@ -169,7 +168,7 @@ class Stream:
 			self.__remove()
 
 	# Send data
-	def send(self, data: Union[bytearray, bytes]) -> int:
+	def send(self, data: bytearray | bytes) -> int:
 		if self.__clisock == None:
 			if self.__listen:
 				raise Exception('Client not connected')
@@ -192,7 +191,7 @@ class Stream:
 
 # Remote Client
 class Client:
-	def __init__(self, sock: Union[socket.socket, ssl.SSLSocket], server: object, chost: str, cid: int, raw: bool = False) -> None:
+	def __init__(self, sock: socket.socket | ssl.SSLSocket, server: object, chost: str, cid: int, raw: bool = False) -> None:
 		self.authed = False
 
 		# Protected prop
@@ -212,7 +211,7 @@ class Client:
 		self.__subs     : set[str] = set()
 
 		# Socket protected
-		self._sock: Union[socket.socket, ssl.SSLSocket] = sock
+		self._sock: socket.socket | ssl.SSLSocket = sock
 		self.__is_ssl = isinstance(sock, ssl.SSLSocket)
 
 		# Socket sendtimeout
@@ -230,7 +229,7 @@ class Client:
 		self.__close = True
 
 	# Send packet
-	def _psend(self, packer: Union[parser.Packer, bytearray], quick: bool) -> bool:
+	def _psend(self, packer: parser.Packer | bytearray, quick: bool) -> bool:
 		if quick and self.__is_ssl:
 			return False
 
@@ -258,7 +257,7 @@ class Client:
 		return self.__unpacker.input(packet, self._pinput)
 
 	# Packet input
-	def _pinput(self, header: interface.Header, url: str, param: Union[dict, list, bytes], data: bytes, quick: bool = False) -> None:
+	def _pinput(self, header: interface.Header, url: str, param: dict | list | bytes, data: bytes, quick: bool = False) -> None:
 		ptype = header.type
 		if ptype == parser.VSOA_TYPE_NOOP or header.flags & parser.VSOA_FLAG_REPLY:
 			return
@@ -422,7 +421,7 @@ class Client:
 		return False
 
 	# Client reply
-	def reply(self, seqno: int, payload: Union[interface.Payload, dict] = None, status: int = 0, tunid: int = 0) -> bool:
+	def reply(self, seqno: int, payload: interface.Payload | dict = None, status: int = 0, tunid: int = 0) -> bool:
 		if self.__close:
 			return False
 
@@ -440,7 +439,7 @@ class Client:
 			return self._psend(packer, False)
 
 	# Send datagram to client
-	def datagram(self, url: str, payload: Union[interface.Payload, dict] = None, quick: bool = False) -> bool:
+	def datagram(self, url: str, payload: interface.Payload | dict = None, quick: bool = False) -> bool:
 		if self.__close:
 			return False
 		if quick and self.__is_ssl:
@@ -467,7 +466,7 @@ class Client:
 		self.__sendto = timeout
 
 	# Get peer certificate
-	def getpeercert(self, binary: bool = False) -> Union[dict, None]:
+	def getpeercert(self, binary: bool = False) -> dict | None:
 		if self.__is_ssl and self._sock:
 			return self._sock.getpeercert(binary_form = binary)
 		else:
@@ -479,7 +478,7 @@ class Server:
 	Client = Client
 	Stream = Stream
 
-	def __init__(self, info: Union[dict, str] = '', passwd: str = '', raw: bool = False) -> None:
+	def __init__(self, info: dict | str = '', passwd: str = '', raw: bool = False) -> None:
 		# Server address
 		self.__addr = None
 		self.__raw  = raw
@@ -559,7 +558,7 @@ class Server:
 		self.__family, self.__addr = family, addr
 
 	# Add a new client
-	def __add_client(self, sock: Union[socket.socket, ssl.SSLSocket], cli_addr: str) -> None:
+	def __add_client(self, sock: socket.socket | ssl.SSLSocket, cli_addr: str) -> None:
 		cid = self.__newcid()
 		cli = Client(sock, self, cli_addr, cid, self.__raw)
 		cli.sendtimeout(self.__sendto)
@@ -638,7 +637,7 @@ class Server:
 		self._passwd = passwd
 
 	# Server publish
-	def publish(self, url: str, payload: Union[interface.Payload, dict] = None, quick: bool = False) -> bool:
+	def publish(self, url: str, payload: interface.Payload | dict = None, quick: bool = False) -> bool:
 		if not url.startswith('/'):
 			raise Exception('URL must start with /')
 		if not self._running:

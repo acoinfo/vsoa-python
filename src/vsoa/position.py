@@ -12,7 +12,6 @@
 import vsoa.parser as parser
 import vsoa.sockopt as sockopt
 import socket, select, ipaddress, os, platform
-from typing import Union
 
 # Packet buffer size
 MAX_QUERY_BUFFER = 4096
@@ -93,7 +92,7 @@ def pos(addr: str, port: int) -> None:
 	vsoa_server_addr = (addr, port)
 
 # Query
-def query(name: str, pserver: Union[tuple[str, int], str], domain: int) -> tuple[str, int]:
+def query(name: str, pserver: tuple[str, int] | str, domain: int) -> tuple[str, int]:
 	family = socket.AF_INET if pserver[0].find(':') < 0 else socket.AF_INET6
 	psock  = sockopt.create(family, 'udp', nonblock = False)
 	packet = parser.json.dumps({ 'name': name, 'domain': domain })

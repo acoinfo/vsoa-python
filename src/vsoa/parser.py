@@ -9,7 +9,6 @@
 # Author: Han.hui <hanhui@acoinfo.com>
 #
 
-from typing import Union
 import vsoa.interface as interface
 import sys, struct
 
@@ -73,7 +72,7 @@ VSOA_STATUS_NO_MEMORY      = 6
 VSOA_ZERO_HEADER = bytearray(VSOA_HDR_LENGTH)
 
 # Get PAD size
-def get_pad(packet: Union[bytes, bytearray]) -> int:
+def get_pad(packet: bytes | bytearray) -> int:
 	return ((packet[2] & VSOA_PAD_MASK) >> VSOA_PAD_SHIFT)
 
 # Set PAD size
@@ -109,7 +108,7 @@ class Packer:
 		return self.__sbuf
 
 	# Add payload to send buffer
-	def payload(self, payload: Union[dict, interface.Payload], param: Union[object, dict, list, str, bytes, bytearray] = None, data: Union[bytes, bytearray] = None) -> bytearray:
+	def payload(self, payload: dict | interface.Payload, param: object | dict | list | str | bytes | bytearray = None, data: bytes | bytearray = None) -> bytearray:
 		lens = self.__lens
 		if lens[1] or lens[2]:
 			raise Exception('Payload has been added')
@@ -188,7 +187,7 @@ class Unpacker:
 		return VSOA_HDR_LENGTH + t[0] + t[1] + t[2] + pad
 
 	# TCP socket input
-	def input(self, packet: Union[bytes, bytearray], callback: callable) -> bool:
+	def input(self, packet: bytes | bytearray, callback: callable) -> bool:
 		rbuf = self.__rbuf
 		rbuf.extend(packet)
 
@@ -218,7 +217,7 @@ class Unpacker:
 
 	# UDP socket input
 	@staticmethod
-	def pinput(packet: Union[bytes, bytearray], raw: bool = False) -> tuple[interface.Header, str, Union[dict, bytes], bytes]:
+	def pinput(packet: bytes | bytearray, raw: bool = False) -> tuple[interface.Header, str, dict | bytes, bytes]:
 		try:
 			t = struct.unpack_from('>BBBBIHHII', packet, 0)
 		except:

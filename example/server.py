@@ -1,5 +1,7 @@
 from vsoa.server import Server, Client
 
+port = 3005
+
 data = { "foo": 0 }
 server = Server(info='Python VSOA Server', passwd='123456')
 
@@ -17,5 +19,7 @@ def echo(cli, request, payload):
 	print("foo", payload["param"])
 	cli.reply(request.seqno, payload)
 
+
+print('Server listening', port)
 server.onclient = onclient
-server.run('localhost', 3005)
+server.run('localhost', port)
