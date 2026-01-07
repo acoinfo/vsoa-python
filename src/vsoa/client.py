@@ -425,7 +425,7 @@ class Client:
 		self.__info = param
 		if data:
 			if len(data) >= 4:
-				self.__cid,     = struct.unpack('>I', data)
+				self.__cid,     = struct.unpack('>I', data[:4])
 				self.__cidvalid = True
 				if len(data) >= 6 and self.__ssl_ctx is None:
 					port, = struct.unpack_from('>H', data, 4)

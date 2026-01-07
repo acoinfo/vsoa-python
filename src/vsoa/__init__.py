@@ -26,6 +26,6 @@ METHOD_GET = 0
 METHOD_SET = 1
 
 # Version
-__version__ = '0.9.0'
+__version__ = '0.9.2'
 
 # end

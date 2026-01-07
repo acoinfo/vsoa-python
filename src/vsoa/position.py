@@ -96,8 +96,13 @@ def pos(addr: str, port: int) -> None:
 def query(name: str, pserver: Union[tuple[str, int], str], domain: int) -> tuple[str, int]:
 	family = socket.AF_INET if pserver[0].find(':') < 0 else socket.AF_INET6
 	psock  = sockopt.create(family, 'udp', nonblock = False)
-	packet = parser.json.dumps({ 'name': name, 'domain': domain })
-	psock.sendto(packet.encode(), pserver)
+	packet = parser.json.dumps({ 'name': name, 'domain': family })
+	
+	try:
+		psock.sendto(packet.encode(), pserver)
+	except:
+		psock.close()
+		return None
 
 	rlist = (psock, )
 	elist, _, _ = select.select(rlist, (), (), float(VSOA_QUERY_TIMEOUT))
@@ -157,14 +162,15 @@ def lookup(name: str, domain: int = -1) -> tuple[str, int]:
 		if answer:
 			return answer
 
-	with open(POS_SERVER_CONF) as file:
-		config = file.read()
+	if os.path.exists(POS_SERVER_CONF):
+		with open(POS_SERVER_CONF) as file:
+			config = file.read()
 
-	if config:
-		lines  = config.splitlines()
-		answer = qlist(name, lines, ' ', domain)
-		if answer:
-			return answer
+		if config:
+			lines  = config.splitlines()
+			answer = qlist(name, lines, ' ', domain)
+			if answer:
+				return answer
 
 # Exports
 __all__ = [ 'Position', 'pos', 'lookup' ]
